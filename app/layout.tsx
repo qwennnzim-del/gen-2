@@ -2,12 +2,23 @@ import type {Metadata, Viewport} from 'next';
 import './globals.css'; // Global styles
 
 export const metadata: Metadata = {
-  title: 'DeepSeek Clone - AI Chatbot',
-  description: 'A powerful, dark-themed AI chatbot interface inspired by DeepSeek. Experience intelligent conversations, coding assistance, and more.',
+  title: 'Gen2 - AI Chatbot by M Fariz Alfauzi',
+  description: 'Gen2 is an advanced AI chatbot developed by M Fariz Alfauzi, a 17-year-old student and CEO from SMK Nurul Islam Affandiyah, Cianjur, West Java. Experience the future of conversational AI.',
+  keywords: ['Gen2', 'AI Chatbot', 'M Fariz Alfauzi', 'SMK Nurul Islam Affandiyah', 'Cianjur', 'Student Developer', 'CEO'],
+  authors: [{ name: 'M Fariz Alfauzi', url: 'https://gen2-ai.app' }],
+  creator: 'M Fariz Alfauzi',
   openGraph: {
-    title: 'DeepSeek Clone - AI Chatbot',
-    description: 'Experience intelligent conversations with our DeepSeek-inspired AI chatbot.',
+    title: 'Gen2 - AI Chatbot by M Fariz Alfauzi',
+    description: 'Developed by M Fariz Alfauzi (17), a student at SMK Nurul Islam Affandiyah, Cianjur. Gen2 brings intelligent AI conversations to life.',
     type: 'website',
+    siteName: 'Gen2 AI',
+    locale: 'id_ID',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Gen2 - AI Chatbot by M Fariz Alfauzi',
+    description: 'Developed by M Fariz Alfauzi (17), a student at SMK Nurul Islam Affandiyah, Cianjur.',
+    creator: '@mfarizalfauzi', // Assuming a handle, or remove if unknown
   },
 };
 
