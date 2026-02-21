@@ -55,6 +55,7 @@ export default function ChatInterface() {
   const [isApiKeyMissing, setIsApiKeyMissing] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [chatHistory, setChatHistory] = useState<{id: string, title: string, date: string}[]>([]);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!apiKey) {
@@ -63,17 +64,47 @@ export default function ChatInterface() {
   }, []);
 
   useEffect(() => {
-    // Load dummy history for demonstration (or from local storage in a real app)
-    setChatHistory([
-      { id: '1', title: 'Belajar Next.js', date: 'Hari ini' },
-      { id: '2', title: 'Resep Nasi Goreng', date: 'Kemarin' },
-      { id: '3', title: 'Analisis Data Saham', date: '7 hari lalu' },
-    ]);
+    const savedHistory = localStorage.getItem('chatHistory');
+    if (savedHistory) {
+      setChatHistory(JSON.parse(savedHistory));
+    }
   }, []);
+
+  const saveChatToHistory = (chatId: string, title: string, msgs: Message[]) => {
+    const newHistoryItem = {
+      id: chatId,
+      title: title,
+      date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+    };
+    
+    setChatHistory(prev => {
+      const existing = prev.find(h => h.id === chatId);
+      let newHistory;
+      if (existing) {
+        newHistory = prev.map(h => h.id === chatId ? { ...h, title: title } : h);
+      } else {
+        newHistory = [newHistoryItem, ...prev];
+      }
+      localStorage.setItem('chatHistory', JSON.stringify(newHistory));
+      return newHistory;
+    });
+    
+    localStorage.setItem(`chat_${chatId}`, JSON.stringify(msgs));
+  };
+
+  const loadChat = (id: string) => {
+    const savedMessages = localStorage.getItem(`chat_${id}`);
+    if (savedMessages) {
+      setMessages(JSON.parse(savedMessages));
+      setCurrentChatId(id);
+      setIsSidebarOpen(false);
+    }
+  };
 
   const handleNewChat = () => {
     setMessages([]);
     setInput('');
+    setCurrentChatId(null);
     setIsSidebarOpen(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
@@ -88,8 +119,20 @@ export default function ChatInterface() {
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    const newMessages: Message[] = [...messages, { role: 'user', content: userMessage }];
+    setMessages(newMessages);
     setIsLoading(true);
+
+    // Create or update chat history
+    let chatId = currentChatId;
+    if (!chatId) {
+      chatId = Date.now().toString();
+      setCurrentChatId(chatId);
+    }
+    
+    // Generate title from first message if it's a new chat
+    const title = messages.length === 0 ? (userMessage.length > 30 ? userMessage.substring(0, 30) + '...' : userMessage) : (chatHistory.find(h => h.id === chatId)?.title || 'New Chat');
+    saveChatToHistory(chatId, title, newMessages);
 
     try {
       // Convert history for the API
@@ -101,7 +144,7 @@ export default function ChatInterface() {
       }));
 
       const chat = ai.chats.create({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3.1-pro-preview',
         history: history,
         config: {
           systemInstruction: "You are Gen2, an advanced AI chatbot created by M Fariz Alfauzi. Fariz is a 17-year-old student and CEO from SMK Nurul Islam Affandiyah in Cianjur, West Java, born on August 8, 2008. You are helpful, expert, and provide accurate, relevant responses. You excel at coding and technical tasks, mimicking the high quality of DeepSeek's interactions but with your own unique identity as Gen2.",
@@ -114,7 +157,9 @@ export default function ChatInterface() {
       const groundingMetadata = result.candidates?.[0]?.groundingMetadata;
 
       if (response) {
-        setMessages(prev => [...prev, { role: 'model', content: response, groundingMetadata }]);
+        const updatedMessages: Message[] = [...newMessages, { role: 'model', content: response, groundingMetadata }];
+        setMessages(updatedMessages);
+        if (chatId) saveChatToHistory(chatId, title, updatedMessages);
       } else {
         throw new Error('No response text');
       }
@@ -137,7 +182,7 @@ export default function ChatInterface() {
   };
 
   return (
-    <div className="flex h-screen bg-[#101010] text-gray-100 font-sans overflow-hidden">
+    <div className="flex h-[100dvh] bg-[#101010] text-gray-100 font-sans overflow-hidden fixed inset-0">
       {/* Sidebar Overlay for Mobile */}
       <AnimatePresence>
         {isSidebarOpen && (
@@ -182,7 +227,8 @@ export default function ChatInterface() {
               {chatHistory.map((chat) => (
                 <button 
                   key={chat.id}
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-[#212121] text-sm text-gray-300 hover:text-white transition-colors truncate"
+                  onClick={() => loadChat(chat.id)}
+                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors truncate text-sm ${currentChatId === chat.id ? 'bg-[#212121] text-white' : 'hover:bg-[#212121] text-gray-300 hover:text-white'}`}
                 >
                   {chat.title}
                 </button>
@@ -352,57 +398,57 @@ export default function ChatInterface() {
             <div ref={messagesEndRef} />
           </div>
         )}
-      </main>
+        </main>
 
-      {/* Input Area */}
-      <footer className="p-4 bg-[#101010]">
-        <div className="max-w-3xl mx-auto">
-          <div className="relative bg-[#212121] rounded-3xl border border-white/5 focus-within:border-white/10 transition-colors">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Pesan Gen2"
-              className="w-full bg-transparent text-gray-100 placeholder-gray-500 px-4 pt-4 pb-12 resize-none focus:outline-none max-h-[200px] min-h-[56px] scrollbar-hide"
-              rows={1}
-            />
-            
-            <div className="absolute bottom-2 left-2 flex items-center gap-1">
-               <button 
-                onClick={() => setIsSearchEnabled(!isSearchEnabled)}
-                className={`p-2 rounded-lg transition-colors ${isSearchEnabled ? 'text-blue-400 bg-blue-400/10' : 'text-gray-400 hover:text-white hover:bg-white/5'}`} 
-                title={isSearchEnabled ? "Disable Search" : "Enable Search"}
-              >
-                <Globe size={18} />
-              </button>
-              <button className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Attach File">
-                <Paperclip size={18} />
-              </button>
+        {/* Input Area */}
+        <footer className="p-4 bg-[#101010]">
+          <div className="max-w-3xl mx-auto">
+            <div className="relative bg-[#212121] rounded-3xl border border-white/5 focus-within:border-white/10 transition-colors">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Pesan Gen2"
+                className="w-full bg-transparent text-gray-100 placeholder-gray-500 px-5 pt-4 pb-14 resize-none focus:outline-none max-h-[200px] min-h-[60px] scrollbar-hide text-base"
+                rows={1}
+              />
+              
+              <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                 <button 
+                  onClick={() => setIsSearchEnabled(!isSearchEnabled)}
+                  className={`p-2 rounded-lg transition-colors ${isSearchEnabled ? 'text-blue-400 bg-blue-400/10' : 'text-gray-400 hover:text-white hover:bg-white/5'}`} 
+                  title={isSearchEnabled ? "Disable Search" : "Enable Search"}
+                >
+                  <Globe size={18} />
+                </button>
+                <button className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Attach File">
+                  <Paperclip size={18} />
+                </button>
+              </div>
+
+              <div className="absolute bottom-3 right-3">
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!input.trim() || isLoading}
+                  className={`p-2 rounded-full transition-all duration-200 flex items-center justify-center ${
+                    input.trim() && !isLoading
+                      ? 'bg-white text-black hover:bg-gray-200'
+                      : 'bg-[#303030] text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <ArrowUp size={18} strokeWidth={3} />
+                </button>
+              </div>
             </div>
-
-            <div className="absolute bottom-2 right-2">
-              <button
-                onClick={handleSendMessage}
-                disabled={!input.trim() || isLoading}
-                className={`p-2 rounded-full transition-all duration-200 flex items-center justify-center ${
-                  input.trim() && !isLoading
-                    ? 'bg-white text-black hover:bg-gray-200'
-                    : 'bg-[#303030] text-gray-500 cursor-not-allowed'
-                }`}
-              >
-                <ArrowUp size={18} strokeWidth={3} />
-              </button>
+            <div className="text-center mt-3">
+               <p className="text-[11px] text-gray-500">
+                 Gen2 dapat membuat kesalahan. Periksa informasi penting.
+               </p>
             </div>
           </div>
-          <div className="text-center mt-3">
-             <p className="text-[11px] text-gray-500">
-               Gen2 dapat membuat kesalahan. Periksa informasi penting.
-             </p>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
     </div>
-  </div>
   );
 }

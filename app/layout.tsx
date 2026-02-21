@@ -3,8 +3,8 @@ import './globals.css'; // Global styles
 
 export const metadata: Metadata = {
   title: 'Gen2 - AI Chatbot by M Fariz Alfauzi',
-  description: 'Gen2 is an advanced AI chatbot developed by M Fariz Alfauzi, a 17-year-old student and CEO from SMK Nurul Islam Affandiyah, Cianjur, West Java. Experience the future of conversational AI.',
-  keywords: ['Gen2', 'AI Chatbot', 'M Fariz Alfauzi', 'SMK Nurul Islam Affandiyah', 'Cianjur', 'Student Developer', 'CEO'],
+  description: 'Gen2 is an advanced AI chatbot created by M Fariz Alfauzi, a 17-year-old student and CEO from SMK Nurul Islam Affandiyah in Cianjur, West Java. Born on August 8, 2008, Fariz developed Gen2 to showcase the potential of student innovation.',
+  keywords: ['Gen2', 'AI Chatbot', 'M Fariz Alfauzi', 'SMK Nurul Islam Affandiyah', 'Cianjur', 'Student Developer', 'CEO', 'Artificial Intelligence', 'Deep Learning', 'Next.js'],
   authors: [{ name: 'M Fariz Alfauzi', url: 'https://gen2-ai.app' }],
   creator: 'M Fariz Alfauzi',
   openGraph: {
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Gen2 - AI Chatbot by M Fariz Alfauzi',
     description: 'Developed by M Fariz Alfauzi (17), a student at SMK Nurul Islam Affandiyah, Cianjur.',
-    creator: '@mfarizalfauzi', // Assuming a handle, or remove if unknown
+    creator: '@mfarizalfauzi',
   },
 };
 

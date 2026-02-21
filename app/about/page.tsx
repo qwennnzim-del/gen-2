@@ -1,4 +1,5 @@
-import React from 'react';
+'use client';
+
 import Link from 'next/link';
 import { ArrowLeft, Github, Instagram, Mail } from 'lucide-react';
 
