@@ -20,6 +20,9 @@ export const metadata: Metadata = {
     description: 'Developed by M Fariz Alfauzi (17), a student at SMK Nurul Islam Affandiyah, Cianjur.',
     creator: '@mfarizalfauzi',
   },
+  verification: {
+    google: 'phdHTCDOPrV7PlvVTQ6ak0zRnX9vbJZnq2sKNSOneGs',
+  },
 };
 
 export const viewport: Viewport = {
