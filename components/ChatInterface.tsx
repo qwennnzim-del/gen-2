@@ -17,7 +17,11 @@ import {
   Info,
   Trash2,
   Search,
-  X
+  X,
+  ThumbsUp,
+  Copy,
+  Share2,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -62,6 +66,8 @@ export default function ChatInterface() {
   const [searchQuery, setSearchQuery] = useState('');
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
   const [isClearAllConfirmOpen, setIsClearAllConfirmOpen] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [likedMessages, setLikedMessages] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!apiKey) {
@@ -148,6 +154,43 @@ export default function ChatInterface() {
   const filteredHistory = chatHistory.filter(chat => 
     chat.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleCopy = async (text: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy text', err);
+    }
+  };
+
+  const handleShare = async (text: string) => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Gen2 AI Response',
+          text: text,
+        });
+      } catch (err) {
+        console.error('Error sharing', err);
+      }
+    } else {
+      handleCopy(text, -1);
+    }
+  };
+
+  const toggleLike = (index: number) => {
+    setLikedMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
 
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading || !ai) {
@@ -503,12 +546,12 @@ export default function ChatInterface() {
                     <ReactMarkdown 
                       components={{
                         pre: ({node, ...props}) => (
-                          <div className="overflow-auto w-full my-2 bg-black/30 p-2 rounded-lg">
+                          <div className="overflow-auto w-full my-2 bg-black/40 p-3 rounded-lg font-mono text-sm custom-scrollbar border border-white/5">
                             <pre {...props} />
                           </div>
                         ),
                         code: ({node, ...props}) => (
-                          <code className="bg-black/30 rounded px-1" {...props} />
+                          <code className="bg-black/40 rounded px-1.5 py-0.5 font-mono text-[0.9em] text-blue-200" {...props} />
                         )
                       }}
                     >
@@ -532,6 +575,35 @@ export default function ChatInterface() {
                             )
                           ))}
                         </div>
+                      </div>
+                    )}
+                    
+                    {msg.role === 'model' && (
+                      <div className="flex items-center gap-1 mt-4 pt-3 border-t border-white/10 text-gray-400">
+                        <button 
+                          onClick={() => handleCopy(msg.content, index)}
+                          className="p-1.5 hover:bg-white/10 hover:text-white rounded-md transition-colors flex items-center gap-1.5 text-xs"
+                          title="Salin pesan"
+                        >
+                          {copiedIndex === index ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                          <span className="hidden sm:inline">{copiedIndex === index ? 'Tersalin!' : 'Salin'}</span>
+                        </button>
+                        <button 
+                          onClick={() => toggleLike(index)}
+                          className={`p-1.5 hover:bg-white/10 hover:text-white rounded-md transition-colors flex items-center gap-1.5 text-xs ${likedMessages.has(index) ? 'text-blue-400' : ''}`}
+                          title="Suka pesan ini"
+                        >
+                          <ThumbsUp size={14} className={likedMessages.has(index) ? 'fill-blue-400/20' : ''} />
+                          <span className="hidden sm:inline">Suka</span>
+                        </button>
+                        <button 
+                          onClick={() => handleShare(msg.content)}
+                          className="p-1.5 hover:bg-white/10 hover:text-white rounded-md transition-colors flex items-center gap-1.5 text-xs"
+                          title="Bagikan pesan"
+                        >
+                          <Share2 size={14} />
+                          <span className="hidden sm:inline">Bagikan</span>
+                        </button>
                       </div>
                     )}
                   </div>
