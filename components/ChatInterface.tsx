@@ -14,7 +14,10 @@ import {
   Bot,
   User,
   Loader2,
-  Info
+  Info,
+  Trash2,
+  Search,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -56,6 +59,9 @@ export default function ChatInterface() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [chatHistory, setChatHistory] = useState<{id: string, title: string, date: string}[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
+  const [isClearAllConfirmOpen, setIsClearAllConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!apiKey) {
@@ -108,6 +114,40 @@ export default function ChatInterface() {
     setIsSidebarOpen(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
+
+  const handleDeleteChat = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setChatToDelete(id);
+  };
+
+  const confirmDeleteChat = () => {
+    if (chatToDelete) {
+      setChatHistory(prev => {
+        const newHistory = prev.filter(h => h.id !== chatToDelete);
+        localStorage.setItem('chatHistory', JSON.stringify(newHistory));
+        return newHistory;
+      });
+      localStorage.removeItem(`chat_${chatToDelete}`);
+      if (currentChatId === chatToDelete) {
+        handleNewChat();
+      }
+      setChatToDelete(null);
+    }
+  };
+
+  const confirmClearAll = () => {
+    chatHistory.forEach(chat => {
+      localStorage.removeItem(`chat_${chat.id}`);
+    });
+    setChatHistory([]);
+    localStorage.removeItem('chatHistory');
+    handleNewChat();
+    setIsClearAllConfirmOpen(false);
+  };
+
+  const filteredHistory = chatHistory.filter(chat => 
+    chat.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleSendMessage = async () => {
     if (!input.trim() || isLoading || !ai) {
@@ -222,17 +262,63 @@ export default function ChatInterface() {
               </button>
             </div>
 
+            <div className="px-4 pb-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                <input 
+                  type="text" 
+                  placeholder="Cari riwayat..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#212121] text-sm text-gray-200 placeholder-gray-500 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-white/20 transition-all"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="flex-1 overflow-y-auto px-2 py-2 custom-scrollbar">
-              <div className="text-xs font-medium text-gray-500 px-2 mb-2">Hari Ini</div>
-              {chatHistory.map((chat) => (
-                <button 
-                  key={chat.id}
-                  onClick={() => loadChat(chat.id)}
-                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors truncate text-sm ${currentChatId === chat.id ? 'bg-[#212121] text-white' : 'hover:bg-[#212121] text-gray-300 hover:text-white'}`}
-                >
-                  {chat.title}
-                </button>
-              ))}
+              <div className="flex items-center justify-between px-2 mb-2">
+                <div className="text-xs font-medium text-gray-500">Riwayat Chat</div>
+                {chatHistory.length > 0 && (
+                  <button 
+                    onClick={() => setIsClearAllConfirmOpen(true)}
+                    className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    Hapus Semua
+                  </button>
+                )}
+              </div>
+              
+              {filteredHistory.length === 0 ? (
+                <div className="text-xs text-gray-500 text-center py-4">
+                  {searchQuery ? 'Tidak ada hasil pencarian' : 'Belum ada riwayat chat'}
+                </div>
+              ) : (
+                filteredHistory.map((chat) => (
+                  <div key={chat.id} className="relative group flex items-center">
+                    <button 
+                      onClick={() => loadChat(chat.id)}
+                      className={`flex-1 text-left px-3 py-2 rounded-lg transition-colors truncate text-sm pr-8 ${currentChatId === chat.id ? 'bg-[#212121] text-white' : 'hover:bg-[#212121] text-gray-300 hover:text-white'}`}
+                    >
+                      {chat.title}
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteChat(chat.id, e)}
+                      className="absolute right-2 p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                      title="Hapus chat"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="p-4 border-t border-white/5 space-y-2">
@@ -254,6 +340,79 @@ export default function ChatInterface() {
               </div>
             </div>
           </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {chatToDelete && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#171717] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+            >
+              <h3 className="text-lg font-semibold text-white mb-2">Hapus Chat?</h3>
+              <p className="text-sm text-gray-400 mb-6">
+                Apakah Anda yakin ingin menghapus chat ini? Tindakan ini tidak dapat dibatalkan.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button 
+                  onClick={() => setChatToDelete(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={confirmDeleteChat}
+                  className="px-4 py-2 text-sm font-medium bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-colors"
+                >
+                  Hapus
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isClearAllConfirmOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#171717] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+            >
+              <h3 className="text-lg font-semibold text-white mb-2">Hapus Semua Riwayat?</h3>
+              <p className="text-sm text-gray-400 mb-6">
+                Apakah Anda yakin ingin menghapus <strong>semua</strong> riwayat chat? Tindakan ini akan menghapus semua data percakapan Anda secara permanen.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button 
+                  onClick={() => setIsClearAllConfirmOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={confirmClearAll}
+                  className="px-4 py-2 text-sm font-medium bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-colors"
+                >
+                  Hapus Semua
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
