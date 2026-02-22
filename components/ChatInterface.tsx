@@ -14,7 +14,6 @@ import {
   ArrowUp,
   Bot,
   User,
-  Loader2,
   Info,
   Trash2,
   Search,
@@ -608,13 +607,15 @@ export default function ChatInterface() {
               >
                 {msg.role === 'model' && (
                   <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 bg-transparent">
-                    <Image 
-                      src="/logo-app.png" 
-                      alt="Gen2" 
-                      width={28} 
-                      height={28} 
-                      className="object-contain"
-                    />
+                    {msg.content !== '' && (
+                      <Image 
+                        src="/logo-app.png" 
+                        alt="Gen2" 
+                        width={28} 
+                        height={28} 
+                        className="object-contain"
+                      />
+                    )}
                   </div>
                 )}
                 
@@ -637,7 +638,25 @@ export default function ChatInterface() {
                   )}
                   <div className="prose prose-invert prose-sm max-w-none">
                     {msg.content === '' && msg.role === 'model' ? (
-                      <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse"></span>
+                      <div className="flex flex-col items-center justify-center py-2 space-y-4">
+                        <div className="loader" style={{ '--size': 0.5 } as React.CSSProperties}>
+                          <svg width="100" height="100" viewBox="0 0 100 100">
+                            <defs>
+                              <mask id="clipping">
+                                <polygon points="0,0 100,0 100,100 0,100" fill="black"></polygon>
+                                <polygon points="25,25 75,25 50,75" fill="white"></polygon>
+                                <polygon points="50,25 75,75 25,75" fill="white"></polygon>
+                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                              </mask>
+                            </defs>
+                          </svg>
+                          <div className="box"></div>
+                        </div>
+                        <span className="text-gray-500 italic animate-pulse text-xs">Memproses...</span>
+                      </div>
                     ) : (
                       <ReactMarkdown 
                       components={{
@@ -735,22 +754,6 @@ export default function ChatInterface() {
                 )}
               </motion.div>
             ))}
-            {isLoading && messages[messages.length - 1]?.role === 'user' && (
-              <div className="flex gap-4">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-transparent">
-                  <Image 
-                    src="/logo-app.png" 
-                    alt="Gen2" 
-                    width={28} 
-                    height={28} 
-                    className="object-contain"
-                  />
-                </div>
-                <div className="flex items-center">
-                  <Loader2 className="animate-spin text-gray-500" size={20} />
-                </div>
-              </div>
-            )}
             <div ref={messagesEndRef} />
           </div>
         )}
