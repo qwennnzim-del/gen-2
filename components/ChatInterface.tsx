@@ -22,7 +22,9 @@ import {
   ThumbsUp,
   Copy,
   Share2,
-  Check
+  Check,
+  FileUp,
+  XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -34,6 +36,7 @@ interface Message {
   role: 'user' | 'model';
   content: string;
   groundingMetadata?: any;
+  fileDataUrl?: string | null;
 }
 
 export default function ChatInterface() {
@@ -69,6 +72,9 @@ export default function ChatInterface() {
   const [isClearAllConfirmOpen, setIsClearAllConfirmOpen] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [likedMessages, setLikedMessages] = useState<Set<number>>(new Set());
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!apiKey) {
@@ -119,6 +125,7 @@ export default function ChatInterface() {
     setInput('');
     setCurrentChatId(null);
     setIsSidebarOpen(false);
+    removeFile();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
@@ -193,8 +200,32 @@ export default function ChatInterface() {
     });
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setFilePreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setFilePreview(null);
+      }
+    }
+  };
+
+  const removeFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleSendMessage = async () => {
-    if (!input.trim() || isLoading || !ai) {
+    if ((!input.trim() && !selectedFile) || isLoading || !ai) {
       if (!ai) setIsApiKeyMissing(true);
       return;
     }
@@ -203,9 +234,36 @@ export default function ChatInterface() {
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    const newMessages: Message[] = [...messages, { role: 'user', content: userMessage }];
+    let filePart = null;
+    let fileDataUrl = null;
+    if (selectedFile) {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve(reader.result as string);
+      });
+      reader.readAsDataURL(selectedFile);
+      fileDataUrl = await base64Promise;
+      
+      const base64Data = fileDataUrl.split(',')[1];
+      filePart = {
+        inlineData: {
+          data: base64Data,
+          mimeType: selectedFile.type
+        }
+      };
+    }
+
+    const newMessageContent = userMessage;
+
+    const newMessages: Message[] = [...messages, { 
+      role: 'user', 
+      content: newMessageContent,
+      fileDataUrl: fileDataUrl
+    }];
     setMessages(newMessages);
     setIsLoading(true);
+    
+    removeFile();
 
     // Create or update chat history
     let chatId = currentChatId;
@@ -215,13 +273,14 @@ export default function ChatInterface() {
     }
     
     // Generate title from first message if it's a new chat
-    const title = messages.length === 0 ? (userMessage.length > 30 ? userMessage.substring(0, 30) + '...' : userMessage) : (chatHistory.find(h => h.id === chatId)?.title || 'New Chat');
+    const title = messages.length === 0 ? (newMessageContent.length > 30 ? newMessageContent.substring(0, 30) + '...' : newMessageContent || 'File Upload') : (chatHistory.find(h => h.id === chatId)?.title || 'New Chat');
     saveChatToHistory(chatId, title, newMessages);
 
     try {
+      // Add empty model message for streaming
+      setMessages(prev => [...prev, { role: 'model', content: '' }]);
+
       // Convert history for the API
-      // The history format for @google/genai is slightly different
-      // It expects an array of Content objects
       const history = messages.map(msg => ({
         role: msg.role,
         parts: [{ text: msg.content }]
@@ -236,17 +295,42 @@ export default function ChatInterface() {
         }
       });
 
-      const result = await chat.sendMessage({ message: userMessage });
-      const response = result.text; // Access text property directly
-      const groundingMetadata = result.candidates?.[0]?.groundingMetadata;
-
-      if (response) {
-        const updatedMessages: Message[] = [...newMessages, { role: 'model', content: response, groundingMetadata }];
-        setMessages(updatedMessages);
-        if (chatId) saveChatToHistory(chatId, title, updatedMessages);
-      } else {
-        throw new Error('No response text');
+      let messagePayload: any = userMessage;
+      if (filePart) {
+        messagePayload = [filePart];
+        if (userMessage) {
+          messagePayload.push({ text: userMessage });
+        } else {
+          messagePayload.push({ text: "Tolong analisis file ini." });
+        }
       }
+
+      const responseStream = await chat.sendMessageStream({ message: messagePayload });
+
+      let fullResponse = '';
+      let groundingMetadata = undefined;
+
+      for await (const chunk of responseStream) {
+        const c = chunk as any;
+        if (c.text) {
+          fullResponse += c.text;
+          setMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1].content = fullResponse;
+            return updated;
+          });
+        }
+        if (c.candidates?.[0]?.groundingMetadata) {
+          groundingMetadata = c.candidates[0].groundingMetadata;
+        }
+      }
+
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1].groundingMetadata = groundingMetadata;
+        if (chatId) saveChatToHistory(chatId, title, updated);
+        return updated;
+      });
     } catch (error) {
       console.error('Error sending message:', error);
       setMessages(prev => [...prev, { 
@@ -498,36 +582,15 @@ export default function ChatInterface() {
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full px-4 text-center space-y-8">
             <div className="relative">
-              <div className="w-16 h-16 bg-[#171717] rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/10 overflow-hidden">
+              <div className="w-24 h-24 flex items-center justify-center mb-4">
                 <Image 
                   src="/logo-app.png" 
                   alt="Gen2 Logo" 
-                  width={64} 
-                  height={64} 
-                  className="object-cover"
-                  onError={(e) => {
-                    // Fallback to SVG if image fails to load
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
+                  width={96} 
+                  height={96} 
+                  className="object-contain drop-shadow-2xl"
+                  priority
                 />
-                <svg 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  className="w-10 h-10 text-blue-500 hidden"
-                >
-                  <path d="M2 12h6" />
-                  <path d="M22 12h-6" />
-                  <path d="M12 2v6" />
-                  <path d="M12 22v-6" />
-                  <circle cx="12" cy="12" r="4" />
-                  <path d="M20 12a8 8 0 0 1-8 8" />
-                  <path d="M4 12a8 8 0 0 1 8-8" />
-                </svg>
               </div>
             </div>
             <h1 className="text-2xl md:text-3xl font-semibold text-gray-100">
@@ -544,8 +607,14 @@ export default function ChatInterface() {
                 className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.role === 'model' && (
-                  <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center flex-shrink-0 mt-1">
-                    <Bot size={18} className="text-blue-400" />
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 bg-transparent">
+                    <Image 
+                      src="/logo-app.png" 
+                      alt="Gen2" 
+                      width={28} 
+                      height={28} 
+                      className="object-contain"
+                    />
                   </div>
                 )}
                 
@@ -554,21 +623,59 @@ export default function ChatInterface() {
                     ? 'bg-[#212121] text-gray-100' 
                     : 'text-gray-100'
                 }`}>
+                  {msg.fileDataUrl && (
+                    <div className="mb-3">
+                      {msg.fileDataUrl.startsWith('data:image') ? (
+                        <img src={msg.fileDataUrl} alt="Uploaded file" className="max-w-full max-h-64 rounded-lg border border-white/10" />
+                      ) : (
+                        <div className="inline-flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg border border-white/10 text-sm text-gray-300">
+                          <FileUp size={16} className="text-blue-400" />
+                          <span>File terlampir</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="prose prose-invert prose-sm max-w-none">
-                    <ReactMarkdown 
+                    {msg.content === '' && msg.role === 'model' ? (
+                      <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse"></span>
+                    ) : (
+                      <ReactMarkdown 
                       components={{
+                        p: ({node, ...props}) => (
+                          <motion.p 
+                            initial={{ opacity: 0, y: 5 }} 
+                            animate={{ opacity: 1, y: 0 }} 
+                            transition={{ duration: 0.4 }} 
+                            className="mb-4 last:mb-0" 
+                            {...(props as any)} 
+                          />
+                        ),
+                        li: ({node, ...props}) => (
+                          <motion.li 
+                            initial={{ opacity: 0, y: 5 }} 
+                            animate={{ opacity: 1, y: 0 }} 
+                            transition={{ duration: 0.4 }} 
+                            {...(props as any)} 
+                          />
+                        ),
                         pre: ({node, ...props}) => (
-                          <div className="overflow-auto w-full my-2 bg-black/40 p-3 rounded-lg font-mono text-sm custom-scrollbar border border-white/5">
-                            <pre {...props} />
-                          </div>
+                          <motion.div 
+                            initial={{ opacity: 0, y: 5 }} 
+                            animate={{ opacity: 1, y: 0 }} 
+                            transition={{ duration: 0.4 }} 
+                            className="overflow-auto w-full my-2 bg-black/40 p-3 rounded-lg font-mono text-sm custom-scrollbar border border-white/5"
+                          >
+                            <pre {...(props as any)} />
+                          </motion.div>
                         ),
                         code: ({node, ...props}) => (
                           <code className="bg-black/40 rounded px-1.5 py-0.5 font-mono text-[0.9em] text-blue-200" {...props} />
                         )
                       }}
                     >
-                      {msg.content}
+                      {msg.content + (isLoading && index === messages.length - 1 && msg.role === 'model' ? ' ▍' : '')}
                     </ReactMarkdown>
+                    )}
                     {msg.groundingMetadata?.groundingChunks && (
                       <div className="mt-4 pt-4 border-t border-white/10">
                         <p className="text-xs font-semibold text-gray-400 mb-2">Sources:</p>
@@ -628,10 +735,16 @@ export default function ChatInterface() {
                 )}
               </motion.div>
             ))}
-            {isLoading && (
+            {isLoading && messages[messages.length - 1]?.role === 'user' && (
               <div className="flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center flex-shrink-0">
-                  <Bot size={18} className="text-blue-400" />
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-transparent">
+                  <Image 
+                    src="/logo-app.png" 
+                    alt="Gen2" 
+                    width={28} 
+                    height={28} 
+                    className="object-contain"
+                  />
                 </div>
                 <div className="flex items-center">
                   <Loader2 className="animate-spin text-gray-500" size={20} />
@@ -647,13 +760,42 @@ export default function ChatInterface() {
         <footer className="p-4 bg-[#101010]">
           <div className="max-w-3xl mx-auto">
             <div className="relative bg-[#212121] rounded-3xl border border-white/5 focus-within:border-white/10 transition-colors">
+              {/* File Preview Area */}
+              {filePreview && (
+                <div className="px-5 pt-3 pb-1">
+                  <div className="relative inline-block">
+                    <img src={filePreview} alt="Preview" className="h-16 w-16 object-cover rounded-lg border border-white/10" />
+                    <button 
+                      onClick={removeFile}
+                      className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full p-0.5 hover:bg-gray-700 transition-colors"
+                    >
+                      <XCircle size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+              {selectedFile && !filePreview && (
+                <div className="px-5 pt-3 pb-1">
+                  <div className="relative inline-flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg border border-white/10 text-sm text-gray-300">
+                    <FileUp size={16} className="text-blue-400" />
+                    <span className="truncate max-w-[150px]">{selectedFile.name}</span>
+                    <button 
+                      onClick={removeFile}
+                      className="ml-2 text-gray-400 hover:text-white transition-colors"
+                    >
+                      <XCircle size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Pesan Gen2"
-                className="w-full bg-transparent text-gray-100 placeholder-gray-500 px-5 pt-4 pb-14 resize-none focus:outline-none max-h-[200px] min-h-[60px] custom-scrollbar text-base"
+                className={`w-full bg-transparent text-gray-100 placeholder-gray-500 px-5 ${selectedFile ? 'pt-2' : 'pt-4'} pb-14 resize-none focus:outline-none max-h-[200px] min-h-[60px] custom-scrollbar text-base`}
                 rows={1}
               />
               
@@ -665,7 +807,18 @@ export default function ChatInterface() {
                 >
                   <Globe size={18} />
                 </button>
-                <button className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Attach File">
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleFileSelect} 
+                  className="hidden" 
+                  accept="image/*,.pdf,.txt,.doc,.docx"
+                />
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" 
+                  title="Attach File"
+                >
                   <Paperclip size={18} />
                 </button>
               </div>
@@ -673,9 +826,9 @@ export default function ChatInterface() {
               <div className="absolute bottom-3 right-3">
                 <button
                   onClick={handleSendMessage}
-                  disabled={!input.trim() || isLoading}
+                  disabled={(!input.trim() && !selectedFile) || isLoading}
                   className={`p-2 rounded-full transition-all duration-200 flex items-center justify-center ${
-                    input.trim() && !isLoading
+                    (input.trim() || selectedFile) && !isLoading
                       ? 'bg-white text-black hover:bg-gray-200'
                       : 'bg-[#303030] text-gray-500 cursor-not-allowed'
                   }`}
