@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import Link from 'next/link';
+import Image from 'next/image';
 import { 
   Menu, 
   Smartphone, 
@@ -497,8 +498,19 @@ export default function ChatInterface() {
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full px-4 text-center space-y-8">
             <div className="relative">
-              <div className="w-16 h-16 bg-blue-600/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
-                 {/* Whale-ish logo placeholder */}
+              <div className="w-16 h-16 bg-[#171717] rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/10 overflow-hidden">
+                <Image 
+                  src="/logo-app.png" 
+                  alt="Gen2 Logo" 
+                  width={64} 
+                  height={64} 
+                  className="object-cover"
+                  onError={(e) => {
+                    // Fallback to SVG if image fails to load
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
                 <svg 
                   viewBox="0 0 24 24" 
                   fill="none" 
@@ -506,7 +518,7 @@ export default function ChatInterface() {
                   strokeWidth="2" 
                   strokeLinecap="round" 
                   strokeLinejoin="round" 
-                  className="w-10 h-10 text-blue-500"
+                  className="w-10 h-10 text-blue-500 hidden"
                 >
                   <path d="M2 12h6" />
                   <path d="M22 12h-6" />

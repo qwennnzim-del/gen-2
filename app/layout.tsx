@@ -34,6 +34,10 @@ export const metadata: Metadata = {
   verification: {
     google: 'phdHTCDOPrV7PlvVTQ6ak0zRnX9vbJZnq2sKNSOneGs',
   },
+  icons: {
+    icon: '/logo-app.png',
+    apple: '/logo-app.png',
+  },
 };
 
 export const viewport: Viewport = {
