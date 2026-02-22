@@ -222,7 +222,7 @@ export default function ChatInterface() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-2 py-2 scrollbar-hide">
+            <div className="flex-1 overflow-y-auto px-2 py-2 custom-scrollbar">
               <div className="text-xs font-medium text-gray-500 px-2 mb-2">Hari Ini</div>
               {chatHistory.map((chat) => (
                 <button 
@@ -286,7 +286,7 @@ export default function ChatInterface() {
         </header>
 
         {/* Main Chat Area */}
-        <main className="flex-1 overflow-y-auto relative scrollbar-hide">
+        <main className="flex-1 overflow-y-auto relative custom-scrollbar">
         {isApiKeyMissing && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2 text-center text-sm">
             API Key is missing. Please add GEMINI_API_KEY to your environment variables.
@@ -410,7 +410,7 @@ export default function ChatInterface() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Pesan Gen2"
-                className="w-full bg-transparent text-gray-100 placeholder-gray-500 px-5 pt-4 pb-14 resize-none focus:outline-none max-h-[200px] min-h-[60px] scrollbar-hide text-base"
+                className="w-full bg-transparent text-gray-100 placeholder-gray-500 px-5 pt-4 pb-14 resize-none focus:outline-none max-h-[200px] min-h-[60px] custom-scrollbar text-base"
                 rows={1}
               />
               
