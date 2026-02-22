@@ -579,9 +579,9 @@ export default function ChatInterface() {
           </div>
         )}
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full px-4 text-center space-y-8">
+          <div className="flex flex-col items-center justify-center h-full px-4 text-center space-y-2">
             <div className="relative">
-              <div className="w-24 h-24 flex items-center justify-center mb-4">
+              <div className="w-24 h-24 flex items-center justify-center">
                 <Image 
                   src="/logo-app.png" 
                   alt="Gen2 Logo" 
@@ -592,7 +592,7 @@ export default function ChatInterface() {
                 />
               </div>
             </div>
-            <h1 className="text-2xl md:text-3xl font-semibold text-gray-100">
+            <h1 className="text-2xl md:text-3xl font-semibold text-gray-100 mt-2">
               Ada yang bisa saya bantu?
             </h1>
           </div>
@@ -606,8 +606,25 @@ export default function ChatInterface() {
                 className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.role === 'model' && (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 bg-transparent">
-                    {msg.content !== '' && (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 bg-transparent relative">
+                    {msg.content === '' && isLoading ? (
+                      <div className="loader" style={{ '--size': 0.25 } as React.CSSProperties}>
+                        <svg width="100" height="100" viewBox="0 0 100 100">
+                          <defs>
+                            <mask id="clipping">
+                              <polygon points="0,0 100,0 100,100 0,100" fill="black"></polygon>
+                              <polygon points="25,25 75,25 50,75" fill="white"></polygon>
+                              <polygon points="50,25 75,75 25,75" fill="white"></polygon>
+                              <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                              <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                              <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                              <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                            </mask>
+                          </defs>
+                        </svg>
+                        <div className="box"></div>
+                      </div>
+                    ) : (
                       <Image 
                         src="/logo-app.png" 
                         alt="Gen2" 
@@ -638,25 +655,7 @@ export default function ChatInterface() {
                   )}
                   <div className="prose prose-invert prose-sm max-w-none">
                     {msg.content === '' && msg.role === 'model' ? (
-                      <div className="flex flex-col items-center justify-center py-2 space-y-4">
-                        <div className="loader" style={{ '--size': 0.5 } as React.CSSProperties}>
-                          <svg width="100" height="100" viewBox="0 0 100 100">
-                            <defs>
-                              <mask id="clipping">
-                                <polygon points="0,0 100,0 100,100 0,100" fill="black"></polygon>
-                                <polygon points="25,25 75,25 50,75" fill="white"></polygon>
-                                <polygon points="50,25 75,75 25,75" fill="white"></polygon>
-                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                              </mask>
-                            </defs>
-                          </svg>
-                          <div className="box"></div>
-                        </div>
-                        <span className="text-gray-500 italic animate-pulse text-xs">Memproses...</span>
-                      </div>
+                      <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse"></span>
                     ) : (
                       <ReactMarkdown 
                       components={{
@@ -716,7 +715,7 @@ export default function ChatInterface() {
                       </div>
                     )}
                     
-                    {msg.role === 'model' && (
+                    {msg.role === 'model' && msg.content !== '' && (!isLoading || index !== messages.length - 1) && (
                       <div className="flex items-center gap-1 mt-4 pt-3 border-t border-white/10 text-gray-400">
                         <button 
                           onClick={() => handleCopy(msg.content, index)}
