@@ -285,13 +285,18 @@ export default function ChatInterface() {
         parts: [{ text: msg.content }]
       }));
 
+      const config: any = {
+        systemInstruction: "You are Gen2, an advanced AI chatbot created by M Fariz Alfauzi. Fariz is a 17-year-old student and CEO from SMK Nurul Islam Affandiyah in Cianjur, West Java, born on August 8, 2008. You are helpful, expert, and provide accurate, relevant responses. You excel at coding and technical tasks, mimicking the high quality of DeepSeek's interactions but with your own unique identity as Gen2."
+      };
+
+      if (isSearchEnabled) {
+        config.tools = [{ googleSearch: {} }];
+      }
+
       const chat = ai.chats.create({
         model: 'gemini-3-flash-preview',
         history: history,
-        config: {
-          systemInstruction: "You are Gen2, an advanced AI chatbot created by M Fariz Alfauzi. Fariz is a 17-year-old student and CEO from SMK Nurul Islam Affandiyah in Cianjur, West Java, born on August 8, 2008. You are helpful, expert, and provide accurate, relevant responses. You excel at coding and technical tasks, mimicking the high quality of DeepSeek's interactions but with your own unique identity as Gen2.",
-          tools: isSearchEnabled ? [{ googleSearch: {} }] : undefined,
-        }
+        config: config
       });
 
       let messagePayload: any = userMessage;
@@ -307,21 +312,30 @@ export default function ChatInterface() {
       const responseStream = await chat.sendMessageStream({ message: messagePayload });
 
       let fullResponse = '';
-      let groundingMetadata = undefined;
+      let groundingMetadata: any = undefined;
 
       for await (const chunk of responseStream) {
         const c = chunk as any;
-        if (c.text) {
-          fullResponse += c.text;
-          setMessages(prev => {
-            const updated = [...prev];
-            updated[updated.length - 1].content = fullResponse;
-            return updated;
-          });
+        try {
+          if (c.text) {
+            fullResponse += c.text;
+          }
+        } catch (e) {
+          // Ignore text extraction errors
         }
-        if (c.candidates?.[0]?.groundingMetadata) {
+        
+        if (c.candidates?.[0]?.groundingMetadata?.groundingChunks) {
           groundingMetadata = c.candidates[0].groundingMetadata;
         }
+        
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1].content = fullResponse;
+          if (groundingMetadata) {
+            updated[updated.length - 1].groundingMetadata = groundingMetadata;
+          }
+          return updated;
+        });
       }
 
       setMessages(prev => {
@@ -330,11 +344,27 @@ export default function ChatInterface() {
         if (chatId) saveChatToHistory(chatId, title, updated);
         return updated;
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error);
+      
+      // Remove the empty model message if it was added
+      setMessages(prev => {
+        if (prev[prev.length - 1].role === 'model' && prev[prev.length - 1].content === '') {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+
+      let errorMessage = 'Maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.';
+      if (error.message?.includes('API key not valid')) {
+        errorMessage = 'API Key tidak valid. Silakan periksa konfigurasi Anda.';
+      } else if (error.message?.includes('fetch failed') || error.message?.includes('network')) {
+        errorMessage = 'Gagal terhubung ke server. Periksa koneksi internet Anda.';
+      }
+
       setMessages(prev => [...prev, { 
         role: 'model', 
-        content: 'Maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.' 
+        content: errorMessage 
       }]);
     } finally {
       setIsLoading(false);
@@ -608,21 +638,23 @@ export default function ChatInterface() {
                 {msg.role === 'model' && (
                   <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 bg-transparent relative">
                     {msg.content === '' && isLoading ? (
-                      <div className="loader" style={{ '--size': 0.25 } as React.CSSProperties}>
-                        <svg width="100" height="100" viewBox="0 0 100 100">
-                          <defs>
-                            <mask id="clipping">
-                              <polygon points="0,0 100,0 100,100 0,100" fill="black"></polygon>
-                              <polygon points="25,25 75,25 50,75" fill="white"></polygon>
-                              <polygon points="50,25 75,75 25,75" fill="white"></polygon>
-                              <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                              <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                              <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                              <polygon points="35,35 65,35 50,65" fill="white"></polygon>
-                            </mask>
-                          </defs>
-                        </svg>
-                        <div className="box"></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="loader" style={{ '--size': 0.25, margin: 0 } as React.CSSProperties}>
+                          <svg width="100" height="100" viewBox="0 0 100 100">
+                            <defs>
+                              <mask id="clipping">
+                                <polygon points="0,0 100,0 100,100 0,100" fill="black"></polygon>
+                                <polygon points="25,25 75,25 50,75" fill="white"></polygon>
+                                <polygon points="50,25 75,75 25,75" fill="white"></polygon>
+                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                                <polygon points="35,35 65,35 50,65" fill="white"></polygon>
+                              </mask>
+                            </defs>
+                          </svg>
+                          <div className="box"></div>
+                        </div>
                       </div>
                     ) : (
                       <Image 
@@ -655,7 +687,7 @@ export default function ChatInterface() {
                   )}
                   <div className="prose prose-invert prose-sm max-w-none">
                     {msg.content === '' && msg.role === 'model' ? (
-                      <span className="inline-block w-2 h-4 bg-blue-400 animate-pulse"></span>
+                      <span className="inline-block w-2 h-4 bg-transparent"></span>
                     ) : (
                       <ReactMarkdown 
                       components={{
