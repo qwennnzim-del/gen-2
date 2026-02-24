@@ -23,7 +23,8 @@ import {
   Share2,
   Check,
   FileUp,
-  XCircle
+  XCircle,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -73,6 +74,8 @@ export default function ChatInterface() {
   const [likedMessages, setLikedMessages] = useState<Set<number>>(new Set());
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
+  const [editingMessageContent, setEditingMessageContent] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -348,6 +351,128 @@ export default function ChatInterface() {
       console.error('Error sending message:', error);
       
       // Remove the empty model message if it was added
+      setMessages(prev => {
+        if (prev[prev.length - 1].role === 'model' && prev[prev.length - 1].content === '') {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+
+      let errorMessage = 'Maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.';
+      if (error.message?.includes('API key not valid')) {
+        errorMessage = 'API Key tidak valid. Silakan periksa konfigurasi Anda.';
+      } else if (error.message?.includes('fetch failed') || error.message?.includes('network')) {
+        errorMessage = 'Gagal terhubung ke server. Periksa koneksi internet Anda.';
+      }
+
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        content: errorMessage 
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendMessage = async (index: number, newContent: string) => {
+    if (!newContent.trim() || isLoading || !ai) return;
+
+    const previousMessages = messages.slice(0, index);
+    const editedMessage: Message = {
+      ...messages[index],
+      content: newContent
+    };
+
+    const newMessages = [...previousMessages, editedMessage];
+    setMessages(newMessages);
+    setEditingMessageIndex(null);
+    setIsLoading(true);
+
+    let chatId = currentChatId;
+    if (!chatId) {
+      chatId = Date.now().toString();
+      setCurrentChatId(chatId);
+    }
+    const title = newMessages.length === 1 ? (newContent.length > 30 ? newContent.substring(0, 30) + '...' : newContent) : (chatHistory.find(h => h.id === chatId)?.title || 'New Chat');
+    saveChatToHistory(chatId, title, newMessages);
+
+    try {
+      setMessages(prev => [...prev, { role: 'model', content: '' }]);
+
+      const history = newMessages.map(msg => ({
+        role: msg.role,
+        parts: [{ text: msg.content }]
+      }));
+
+      const config: any = {
+        systemInstruction: "You are Gen2, an advanced AI chatbot created by M Fariz Alfauzi. Fariz is a 17-year-old student and CEO from SMK Nurul Islam Affandiyah in Cianjur, West Java, born on August 8, 2008. You are helpful, expert, and provide accurate, relevant responses. You excel at coding and technical tasks, mimicking the high quality of DeepSeek's interactions but with your own unique identity as Gen2."
+      };
+
+      if (isSearchEnabled) {
+        config.tools = [{ googleSearch: {} }];
+      }
+
+      const chat = ai.chats.create({
+        model: 'gemini-3-flash-preview',
+        history: history,
+        config: config
+      });
+
+      let messagePayload: any = newContent;
+      if (editedMessage.fileDataUrl) {
+        const base64Data = editedMessage.fileDataUrl.split(',')[1];
+        const mimeType = editedMessage.fileDataUrl.split(';')[0].split(':')[1];
+        const filePart = {
+          inlineData: {
+            data: base64Data,
+            mimeType: mimeType
+          }
+        };
+        messagePayload = [filePart];
+        if (newContent) {
+          messagePayload.push({ text: newContent });
+        } else {
+          messagePayload.push({ text: "Tolong analisis file ini." });
+        }
+      }
+
+      const responseStream = await chat.sendMessageStream({ message: messagePayload });
+
+      let fullResponse = '';
+      let groundingMetadata: any = undefined;
+
+      for await (const chunk of responseStream) {
+        const c = chunk as any;
+        try {
+          if (c.text) {
+            fullResponse += c.text;
+          }
+        } catch (e) {
+        }
+        
+        if (c.candidates?.[0]?.groundingMetadata?.groundingChunks) {
+          groundingMetadata = c.candidates[0].groundingMetadata;
+        }
+        
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1].content = fullResponse;
+          if (groundingMetadata) {
+            updated[updated.length - 1].groundingMetadata = groundingMetadata;
+          }
+          return updated;
+        });
+      }
+
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1].groundingMetadata = groundingMetadata;
+        if (chatId) saveChatToHistory(chatId, title, updated);
+        return updated;
+      });
+    } catch (error: any) {
+      console.error('Error sending message:', error);
+      
       setMessages(prev => {
         if (prev[prev.length - 1].role === 'model' && prev[prev.length - 1].content === '') {
           return prev.slice(0, -1);
@@ -685,46 +810,89 @@ export default function ChatInterface() {
                       )}
                     </div>
                   )}
-                  <div className="prose prose-invert prose-sm max-w-none">
+                  <div className="prose prose-invert prose-sm max-w-none relative group/msg">
                     {msg.content === '' && msg.role === 'model' ? (
                       <span className="inline-block w-2 h-4 bg-transparent"></span>
-                    ) : (
-                      <ReactMarkdown 
-                      components={{
-                        p: ({node, ...props}) => (
-                          <motion.p 
-                            initial={{ opacity: 0, y: 5 }} 
-                            animate={{ opacity: 1, y: 0 }} 
-                            transition={{ duration: 0.4 }} 
-                            className="mb-4 last:mb-0" 
-                            {...(props as any)} 
-                          />
-                        ),
-                        li: ({node, ...props}) => (
-                          <motion.li 
-                            initial={{ opacity: 0, y: 5 }} 
-                            animate={{ opacity: 1, y: 0 }} 
-                            transition={{ duration: 0.4 }} 
-                            {...(props as any)} 
-                          />
-                        ),
-                        pre: ({node, ...props}) => (
-                          <motion.div 
-                            initial={{ opacity: 0, y: 5 }} 
-                            animate={{ opacity: 1, y: 0 }} 
-                            transition={{ duration: 0.4 }} 
-                            className="overflow-auto w-full my-2 bg-black/40 p-3 rounded-lg font-mono text-sm custom-scrollbar border border-white/5"
+                    ) : editingMessageIndex === index ? (
+                      <div className="flex flex-col gap-2 w-full min-w-[200px] sm:min-w-[300px]">
+                        <textarea
+                          value={editingMessageContent}
+                          onChange={(e) => setEditingMessageContent(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleResendMessage(index, editingMessageContent);
+                            }
+                          }}
+                          className="w-full bg-[#303030] text-gray-100 rounded-lg p-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20 resize-none custom-scrollbar"
+                          rows={Math.max(3, editingMessageContent.split('\n').length)}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setEditingMessageIndex(null)}
+                            className="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-md transition-colors"
                           >
-                            <pre {...(props as any)} />
-                          </motion.div>
-                        ),
-                        code: ({node, ...props}) => (
-                          <code className="bg-black/40 rounded px-1.5 py-0.5 font-mono text-[0.9em] text-blue-200" {...props} />
-                        )
-                      }}
-                    >
-                      {msg.content + (isLoading && index === messages.length - 1 && msg.role === 'model' ? ' ▍' : '')}
-                    </ReactMarkdown>
+                            Batal
+                          </button>
+                          <button
+                            onClick={() => handleResendMessage(index, editingMessageContent)}
+                            className="px-3 py-1.5 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
+                          >
+                            Kirim Ulang
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <ReactMarkdown 
+                        components={{
+                          p: ({node, ...props}) => (
+                            <motion.p 
+                              initial={{ opacity: 0, y: 5 }} 
+                              animate={{ opacity: 1, y: 0 }} 
+                              transition={{ duration: 0.4 }} 
+                              className="mb-4 last:mb-0" 
+                              {...(props as any)} 
+                            />
+                          ),
+                          li: ({node, ...props}) => (
+                            <motion.li 
+                              initial={{ opacity: 0, y: 5 }} 
+                              animate={{ opacity: 1, y: 0 }} 
+                              transition={{ duration: 0.4 }} 
+                              {...(props as any)} 
+                            />
+                          ),
+                          pre: ({node, ...props}) => (
+                            <motion.div 
+                              initial={{ opacity: 0, y: 5 }} 
+                              animate={{ opacity: 1, y: 0 }} 
+                              transition={{ duration: 0.4 }} 
+                              className="overflow-auto w-full my-2 bg-black/40 p-3 rounded-lg font-mono text-sm custom-scrollbar border border-white/5"
+                            >
+                              <pre {...(props as any)} />
+                            </motion.div>
+                          ),
+                          code: ({node, ...props}) => (
+                            <code className="bg-black/40 rounded px-1.5 py-0.5 font-mono text-[0.9em] text-blue-200" {...props} />
+                          )
+                        }}
+                      >
+                        {msg.content + (isLoading && index === messages.length - 1 && msg.role === 'model' ? ' ▍' : '')}
+                      </ReactMarkdown>
+                      {msg.role === 'user' && !isLoading && (
+                        <button
+                          onClick={() => {
+                            setEditingMessageIndex(index);
+                            setEditingMessageContent(msg.content);
+                          }}
+                          className="absolute -right-10 top-0 p-1.5 text-gray-500 hover:text-white hover:bg-white/10 rounded-md opacity-0 group-hover/msg:opacity-100 transition-all"
+                          title="Edit pesan"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                    </>
                     )}
                     {msg.groundingMetadata?.groundingChunks && (
                       <div className="mt-4 pt-4 border-t border-white/10">
